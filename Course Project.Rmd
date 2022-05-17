@@ -1,0 +1,119 @@
+## Goal
+
+The goal of this project is to predict the manner in which people do the exercise. This is the "classes" variable in the training set. We may use any of the other variables to predict with. We create a report describing all the analysis and in particular the prediction of 20 different test cases.
+
+The five different 'classe' factors in this dataset are: 
+	* Exactly according to the specification (Class A)
+	* Throwing the elbows to the front (Class B)
+	* Lifting the dumbbell only halfway (Class C)
+	* Lowering the dumbbell only halfway (Class D) 
+	* Throwing the hips to the front (Class E)
+
+
+## Library
+```{r results='hide', message=FALSE}
+library(rattle)
+library(corrplot)
+library(caret)
+
+```
+
+## Dataset
+
+```{r results='hide', message=FALSE}
+Train_data <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), header=TRUE)
+Test_data <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), header=TRUE)
+```
+
+## Data Preprocessing  
+
+The training data set is partitioned into a training set (80% of the data) for the modeling process and a validation set (20%) for testing purposes.The validation set will allow us to pick the most accurate model.
+
+```{r split data, message=FALSE}
+set.seed(94553)
+inTrain <- createDataPartition(Train_data$classe, p = 0.80, list = FALSE)
+trainData <- Train_data[inTrain, ]
+validationData <- Train_data[-inTrain, ]
+```
+
+## Clean Data
+
+1. Check columns with NAs, Null and #DIV values and apply "0" value to all of them
+2. Remove first 7 and the last one columns in order to carry on the preprocessing step
+3. Convert all 'integer' columns to 'numeric'
+4. Check the predictor with the NON ZERO VARIANCE function
+5. Define dataset with needed data only
+
+```{r clean data}
+nearZero <- nearZeroVar(trainData)
+trainData <- trainData[, -nearZero]
+validationData  <- validationData[, -nearZero]
+
+mostlyNA <- sapply(trainData, function(x) mean(is.na(x))) > 0.95
+mostlyNATest <- sapply(validationData, function(x) mean(is.na(x))) > 0.95
+trainData <- trainData[, mostlyNA==F]
+validationData <- validationData[, mostlyNATest==F]
+
+trainData <- trainData[, -(1:5)]
+validationData <- validationData[, -(1:5)]
+```
+
+## Analysis 
+I have chosen to test three models including the classification tree, a generalize boosted regression model, and a random forest model. I chose these because I wanted to see how they behave in comparassing.
+
+### Classification Tree
+
+```{r classification tree, message=FALSE}
+trControl <- trainControl(method="cv", number=5)
+model_CT <- train(classe~., , method="rpart", data=trainData, trControl=trControl)
+fancyRpartPlot(model_CT$finalModel)
+predict_train <- predict(model_CT, newdata=validationData)
+confMatClassTree <- confusionMatrix(factor(validationData$classe),predict_train)
+
+confMatClassTree$table
+confMatClassTree$overall[1]
+```
+
+### Generalized Boosted Regression Model (GBM)
+
+
+```{r  message=FALSE}
+set.seed(90210)
+GBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+GBM_model  <- train(classe ~ ., data=trainData, method = "gbm", trControl = GBM, verbose = FALSE)
+GBM_model$finalModel
+GBM_predict <- predict(GBM_model, newdata=validationData)
+GBM_confusion_matrix <- confusionMatrix(GBM_predict, factor(validationData$classe))
+GBM_confusion_matrix
+```
+
+### Random Forest
+
+From the random forest model we can see that using 27 variables in the model provided the highest accuracy. Across 500 trees this model performed significantly better than the classification tree. The accuracy for the random forest was 99.8%.
+```{r random forest, message=FALSE}
+random_forest <- trainControl(method="cv", number=3, verboseIter=FALSE)
+RF_model <- train(classe ~ ., data=trainData, method="rf", trControl=random_forest)
+RF_model$finalModel
+
+RF_predict <- predict(RF_model, newdata=validationData)
+RF_confusion_matrix <- confusionMatrix(factor(validationData$classe), RF_predict)
+
+RF_confusion_matrix
+
+```
+
+### Conclusion
+
+The model accuracy:
+
+Classification Tree Model: 52.7%
+
+Generalized Boosted Model: 98.57%   
+
+Random Forest Model: 99.92%
+
+The random forest model has the best accuracy!
+```{r message=FALSE}
+RF_predict_test <- predict(RF_model, newdata = Test_data)
+RF_predict_test
+```
